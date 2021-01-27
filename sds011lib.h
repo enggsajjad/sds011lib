@@ -1,77 +1,58 @@
 //! ESP32 C/C++ Arduino library for the Nova Fitness SDS011 PM sensor (interface)
 
-/// @file
-/// @author Matthias Budde / Sajjad Hussain
+/// @file sds011lib.h
+/// @author Sajjad Hussain
 /// @version 0.1
 
-#ifndef sds011lib_h 
-#define sds011lib_h 
+#ifndef PM_SDS011_h 
+#define PM_SDS011_h 
 
 #include "Arduino.h"
 
-class sds011
-{
-    public:
-        /// @brief constructor
-        sds011(void);
-        /// @brief initialization method 
-        /// @param uart pointer to HardwareSerial
-        /// @param rx RX pin
-        /// @param tx TX pin
-        void init(HardwareSerial *uart);
-        void init(HardwareSerial *uart, int8_t rx, int8_t tx);
-        /// @brief read method
-        /// @param pm10 pointer to a float to which PM10 return value will be written
-        /// @param pm25 pointer to a float to which PM2.5 return value will be written 
-        /// @return err error code 
-        uint8_t read(float *pm25_return, float *pm10_return);
-        /// @brief sleep method, initiates manual hibernation
-        /// @return err error code 
-        uint8_t sleep();
-        /// @brief wakeup method, ends manual hibernation
-        /// @return err error code 
-        uint8_t wakeup();
-    private:
-        Stream *_uart;
-        uint16_t _serial_no;
-        uint8_t _rx;
-        uint8_t _tx;
-        uint8_t _mode;
-        /// @brief send_msg method
-        /// @param command code of command that should be sent to SDS011 sensor
-        /// @param option_1 first parameter to be set, depending on selected command (default: 0x00)
-        /// @param option_2 second parameter to be set, depending on selected command (default: 0x00)
-        /// @param id_1 first ID byte of sensor that the command is addressed to (default: 0xFF = all sensors)
-        /// @param id_2 seconf ID byte of sensor that the command is addressed to (default: 0xFF = all sensors)
-        /// @return err error code 
-        uint8_t send_msg(uint8_t command, uint8_t option_1 = 0x00, uint8_t option_2 = 0x00, uint8_t id_1 = 0xFF, uint8_t id_2 = 0xFF);
-        /// @brief read_msg method (overloaded)
-        /// @param pointer to a float to which a return value will be written
-        /// @param pointer to a float to which a return value will be written
-        /// @return err error code 
-        uint8_t read_msg(float *return_1, float *return_2);
-        /// @brief read_msg method (overloaded)
-        /// @param byte identifying the type of reply that should be read
-        /// @param pointer to a byte to which a return value will be written
-        /// @param pointer to a byte to which a return value will be written
-        /// @return err error code 
-        uint8_t read_msg(uint8_t command, uint16_t *return_1, uint16_t *return_2, uint16_t *id);
-        uint8_t set_mode(uint8_t mode);
+/// Reporting mode as auto
+#define REPORTMODE 0
+/// Reporting mode as queries
+#define QUERYMODE  1
+/// get or receive
+#define ASKMODE 0
+/// set or write
+#define SETMODE 1
+/// mode set to sleep
+#define SLEEPMODE 0
+/// mode set to normal
+#define WORKMODE  1
+/// set the maximum trials for response
+#define MAX_WAIT 30
+
+/// sds011 sensor class interface to interace with the hardware
+class sds011 {
+	public:
+		sds011(void);
+		bool begin(HardwareSerial* uart,	uint8_t rx, uint8_t tx, uint8_t id_1 = 0xFF, uint8_t id_2 = 0xFF );
+		bool dataReportingModeCmd( 			uint8_t *response, 	uint8_t mode = REPORTMODE,	uint8_t set = ASKMODE );
+		bool dataQueryCmd( float *ppm10, 		float *ppm25 );
+		bool deviceIdCmd( 		uint8_t response[2], 	uint8_t new_Id1, uint8_t new_Id2 );
+		bool sleepWorkModeCmd( 		uint8_t *response, 	uint8_t awake = WORKMODE,uint8_t set = ASKMODE);
+		bool workPeriodCmd(		uint8_t *response, 	uint8_t minutes = 0,uint8_t set = ASKMODE);
+		bool deviceInfoCmd( String *ver, uint16_t *id );
+    void setDebug( bool on );
+	private:
+    /// uart rx pin
+		uint8_t _rx;
+		/// uart tx pin
+   uint8_t _tx;
+   /// serial number lower byte
+		uint8_t _id_1;
+   /// serial number lower byte
+   uint8_t _id_2;
+   /// the debugging flag
+		bool _debug;
+    /// the hardware uart port
+    Stream *_uart;  
+    bool sendCommand( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2 );
+    bool getResponse(uint8_t cmd, uint8_t reply[10] );
+    bool sdsCommunicate( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2, uint8_t reply[10]  );
+			
 };
-
-
-
-// (0) Basic reading of sensor data
-
-// (1) Manual hibernation (sleep and wake)
-
-// (2) Timed hibernate (cycle to work)
-
-// (3) User ID setting
-
-// (4) Set data reporting mode (active report and query report)
-
-// (5) Version number query
-
 
 #endif

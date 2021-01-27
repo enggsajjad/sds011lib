@@ -1,37 +1,49 @@
-//! ESP32 C/C++ Arduino library for the Nova Fitness SDS011 PM sensor (implementation)
+//! ESP32 C/C++ Arduino library for the Nova Fitness sds011 PM sensor (implementation)
 
 /// @file sds011lib.cpp 
-/// @author Matthias Budde / Sajjad Hussain
+/// @author Sajjad Hussain
 /// @version 0.1
 
-unsigned char MSG_HEAD        = 0xAA; //170
-unsigned char MSG_TAIL        = 0xAB; //172
-unsigned char MSG_RESERVED    = 0x00;
-unsigned char CMD             = 0xB4; //180
-unsigned char REPLY_DATA      = 0xC0; //192
-unsigned char REPLY_CFG       = 0xC5; //197
-unsigned char CMD_MODE        = 0x02;
-unsigned char CMD_QUERY       = 0x04;
-unsigned char CMD_ID          = 0x05;
-unsigned char CMD_SLEEP       = 0x06;
-unsigned char CMD_FW_VERSION  = 0x07;
-unsigned char CMD_CYCLE       = 0x08;
-unsigned char MODE_QUERY      = 0x01;
-
 #include "sds011lib.h"
+
+
+/// sds response header
+unsigned char MSG_HEAD        = 0xAA; //170
+/// sds response footer
+unsigned char MSG_TAIL        = 0xAB; //172
+/// sds response/command reserve word
+unsigned char MSG_RESERVED    = 0x00;
+/// sds sending command
+unsigned char CMD             = 0xB4; //180
+/// response query data indication
+unsigned char REPLY_DATA      = 0xC0; //192
+/// response query configuration indication
+unsigned char REPLY_CFG       = 0xC5; //197
+/// sending command for reporting mode
+unsigned char CMD_REPORTING_MODE        = 0x02;
+/// sending command for query data mode
+unsigned char CMD_QUERY_DATA       = 0x04;
+/// sending command to set device id
+unsigned char CMD_SET_DEVICE_ID          = 0x05;
+/// sending command for sleep and work mode
+unsigned char CMD_SLEEP_AND_WORK       = 0x06;
+/// sending command for geting firmware version
+unsigned char CMD_FIRMWARE_VERSION  = 0x07;
+/// sending command for working period setting
+unsigned char CMD_WORKING_PERIOD       = 0x08;
 
 /**
  * @mainpage 
  * @section Description
  *
- * ESP32 C/C++ Arduino library for the Nova Fitness SDS011 PM sensor 
+ * ESP32 C/C++ Arduino library for the Nova Fitness sds011 PM sensor 
  *
- * @author Matthias Budde
+ * @author Sajjad Hussain
  * @version 0.1
  *
  * @section License
  *
- * Copyright 2020 Matthias Budde
+ * Copyright 2020 Sajjad Hussain
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  * 
@@ -43,32 +55,56 @@ unsigned char MODE_QUERY      = 0x01;
  *
  * @section Specs
  *
- * Relevant specs are included in the documentation of the individual methods. The full and detailed specification can be found in the Nova Fitness Co. Ltd. SDS011 data sheet, V1.3 and the Nova Fitness Co. Ltd. Laser Dust Sensor Control Protocol, V1.4  
+ * Relevant specs are included in the documentation of the individual methods. The full and detailed specification can be found in the Nova Fitness Co. Ltd. sds011 data sheet, V1.3 and the Nova Fitness Co. Ltd. Laser Dust Sensor Control Protocol, V1.4  
  * 
- * @see https://web.archive.org/web/20200525083221/https://www-sd-nf.oss-cn-beijing.aliyuncs.com/%E5%AE%98%E7%BD%91%E4%B8%8B%E8%BD%BD/SDS011%20laser%20PM2.5%20sensor%20specification-V1.4.pdf
+ * @see https://web.archive.org/web/20200525083221/https://www-sd-nf.oss-cn-beijing.aliyuncs.com/%E5%AE%98%E7%BD%91%E4%B8%8B%E8%BD%BD/sds011%20laser%20PM2.5%20sensor%20specification-V1.4.pdf
  * @see https://www.arduinoforum.de/attachment.php?aid=3023
  */
 
 
+/**************************************************************************/
+/*!
+    @brief  constructor for the class
+*/
+/**************************************************************************/
 sds011::sds011(void) {
+
 }
-
-
-/// Specification from the Nova Fitness Co. Ltd. SDS011 data sheet, V1.3 
-///
-/// | UART ||
-/// | :-------------------- | :-------------|
-/// | Bit rate              | 9600          |
-/// | Data bit              | 8             |
-/// | Parity bit            | NO            |
-/// | Stop bit              | 1             |
-/// | Data Packet frequency | 1Hz           |
-void sds011::init(HardwareSerial* uart, int8_t rx, int8_t tx) {
-    uart->begin(9600,SERIAL_8N1, rx, tx);
- _uart=uart;
-  _rx = rx;
-  _tx = tx;
-};
+/**************************************************************************/
+/*!
+    @brief function to communicate to sensor by sending a command and fetch the response into a buffer.
+    @param command one byte of the command to be sent
+    @param option_1 first parameter of the command, depends on different positions in the command array
+    @param option_2 second parameter of the command, depends on different positions in the command array
+    @param id_1 the id_lsb where commands to be send
+    @param id_2 the id_msb where commands to be send
+    @param reply ten bytes of the command response
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::sdsCommunicate( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2, uint8_t reply[10]  )
+{
+  uint8_t checksum=0,i, lc, wait=MAX_WAIT;
+  bool status=false;
+   
+  for(lc = 0; lc < 10 && status == false; ++lc)
+  {
+    sendCommand(  command,  option_1,   option_2,  id_1,  id_2 );
+    
+    if( i >= wait )
+    {
+      if( _debug)Serial.println("data unavailable, exiting...");
+      i = 0;
+      status = false;
+      if ( (command == 6 && option_1 == 1 && option_2 == 1) ) { 
+        // wake from sleep.
+        break;
+      }
+    }
+    status = getResponse( command, reply );
+  }
+  return( status );
+}
 
 /// Sends command to the sensor. 
 /// 
@@ -102,35 +138,64 @@ void sds011::init(HardwareSerial* uart, int8_t rx, int8_t tx) {
 ///
 /// @see https://www.arduinoforum.de/attachment.php?aid=3023
 ///
-uint8_t sds011::send_msg(uint8_t command, uint8_t option_1, uint8_t option_2, uint8_t id_1, uint8_t id_2) {
-    uint8_t checksum = command + option_1 + option_2 + id_1 + id_2;
-
-    _uart->write(MSG_HEAD);
-    _uart->write(CMD);
-    _uart->write(command);
-    if ((command == CMD_MODE) || (command == CMD_SLEEP) || (command == CMD_CYCLE)) {
-        _uart->write(option_1); 
-        _uart->write(option_2);
-    }
-    for (uint8_t i = 0; i < 10; i++) {
-        _uart->write(MSG_RESERVED);
-    }
-    if (command == CMD_ID) {
-        _uart->write(option_1); 
-        _uart->write(option_2);
-    } else if ((command == CMD_QUERY) || (command == CMD_FW_VERSION)) {
-        _uart->write(MSG_RESERVED);
-        _uart->write(MSG_RESERVED);
-    }
-    _uart->write(id_1);
-    _uart->write(id_2);
-    _uart->write(checksum);
-    _uart->write(MSG_TAIL);
-
-    _uart->flush();
-
-    return 0;
-};
+/**************************************************************************/
+/*!
+    @brief function to send the command to sensor and fetch the response into a buffer.
+    When no reply is received, usually this is because device was just reporting.
+    This happens when device is in reporting mode, as then the device spits out a
+    a continuous stream of data. In such cases. command has to be sent again to get an answer.    
+    @param command one byte of the command to be sent
+    @param option_1 first parameter of the command, depends on different positions in the command array
+    @param option_2 second parameter of the command, depends on different positions in the command array
+    @param id_1 the id_lsb where commands to be send
+    @param id_2 the id_msb where commands to be send
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::sendCommand( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2 )
+{
+  uint8_t checksum=0,i, lc, wait=MAX_WAIT;
+  bool status=false;  
+  if( _debug)Serial.println("Sending command...       ");
+  
+  checksum = command + option_1 + option_2 + id_1 + id_2;
+  _uart->write(MSG_HEAD);
+  _uart->write(CMD);
+  _uart->write(command);
+  if ((command == CMD_REPORTING_MODE) || (command == CMD_SLEEP_AND_WORK) || (command == CMD_WORKING_PERIOD)) 
+  {
+    _uart->write(option_1); 
+    _uart->write(option_2);
+  }
+  for (uint8_t i = 0; i < 10; i++) 
+  {
+    _uart->write(MSG_RESERVED);
+  }
+  if (command == CMD_SET_DEVICE_ID) 
+  {
+    _uart->write(option_1); 
+    _uart->write(option_2);
+  }else if ((command == CMD_QUERY_DATA) || (command == CMD_FIRMWARE_VERSION)) 
+  {
+    _uart->write(MSG_RESERVED);
+    _uart->write(MSG_RESERVED);
+  }
+  _uart->write(id_1);
+  _uart->write(id_2);
+  _uart->write(checksum);
+  _uart->write(MSG_TAIL);
+  _uart->flush();
+  
+  delay(300);
+    
+  for(i=0; !_uart->available() && i < wait ; ++i )
+  {
+    delay(20);
+  }
+  
+  status=true;
+  return( status );
+}
 
 /// Prompts sensor to report measurement data. If sensor is in report query mode, an according query command is sent first, otherwise, the next measurent reported in the 
 /// 
@@ -155,141 +220,364 @@ uint8_t sds011::send_msg(uint8_t command, uint8_t option_1, uint8_t option_2, ui
 /// | PM2.5 value: | PM2.5 (μg /m3) = ((PM2.5 High byte *256) + PM2.5 low byte)/10 |
 /// | PM10 value:  | PM10 (μg /m3) = ((PM10 high byte*256) + PM10 low byte)/10     |
 /// 
-/// @see https://web.archive.org/web/20200525083221/https://www-sd-nf.oss-cn-beijing.aliyuncs.com/%E5%AE%98%E7%BD%91%E4%B8%8B%E8%BD%BD/SDS011%20laser%20PM2.5%20sensor%20specification-V1.4.pdf
+/// @see https://web.archive.org/web/20200525083221/https://www-sd-nf.oss-cn-beijing.aliyuncs.com/%E5%AE%98%E7%BD%91%E4%B8%8B%E8%BD%BD/sds011%20laser%20PM2.5%20sensor%20specification-V1.4.pdf
 /// @see https://www.arduinoforum.de/attachment.php?aid=3023
 /// 
-uint8_t sds011::read_msg(float *return_1, float *return_2) {
-    uint8_t current_byte = 0x00;
-    uint8_t pm10_low_byte = 0x00;
-    uint8_t pm10_high_byte = 0x00;
-    uint8_t pm25_low_byte = 0x00;
-    uint8_t pm25_high_byte = 0x00;
-    uint8_t id_byte_1 = 0x00;
-    uint8_t id_byte_2 = 0x00;
-    uint8_t err = 1;
-    uint8_t bytes_read = 0;
-    int checksum = 0;
-    int ok = 0;
+/**************************************************************************/
+/*!
+    @brief function to send the command to sensor and fetch the response into a buffer.
+    When no reply is received, usually this is because device was just reporting.
+    This happens when device is in reporting mode, as then the device spits out a
+    a continuous stream of data.   
+    In such cases. command has to be sent again to get an answer.    
+    @param cmd one byte of the command to be sent
+    @param reply ten bytes of the command response
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::getResponse(uint8_t cmd, uint8_t reply[10] )
+{
+  uint8_t checksum=0,i, lc, wait=MAX_WAIT;
+  bool status=false;
 
-    while((_uart->available() > 0) && (_uart->available() >= (10-bytes_read))) 
+  if( _debug )Serial.println("Receiving response... ");
+  
+  for( i=0, status=true, checksum=0; _uart->available() && i < 10; ++i) 
+  {
+    reply[i] = _uart->read();
+    if (i>1 && i < 8)checksum += reply[i];
+    if( _debug){ Serial.print(" "); Serial.print(reply[i], HEX); }
+    switch(i)
     {
-        current_byte = _uart->read();
-        /*Serial.print("bytes count,read= ");
-        Serial.print(bytes_read);
-        Serial.print(", ");
-        Serial.println(current_byte);*/
-        switch(bytes_read) {
-            case 0: if(current_byte == MSG_HEAD) { bytes_read++;} break;
-            case 1: if(current_byte == REPLY_DATA) {bytes_read++;} else {bytes_read = 0;}  break;
-            case 2: pm25_low_byte = current_byte; bytes_read++; checksum = current_byte;  break;
-            case 3: pm25_high_byte = current_byte; bytes_read++; checksum += current_byte;  break;
-            case 4: pm10_low_byte = current_byte; bytes_read++; checksum += current_byte;  break;
-            case 5: pm10_high_byte = current_byte; bytes_read++; checksum += current_byte;  break;
-            case 6: id_byte_1 = current_byte; bytes_read++; checksum += current_byte;  break;
-            case 7: id_byte_2 = current_byte; bytes_read++; checksum += current_byte;  break;
-            case 8: if (current_byte ==  ((uint8_t)(checksum%256))) {ok = 1;bytes_read++;} else {bytes_read = 0;}  break;
-            case 9: if(current_byte == MSG_TAIL) {bytes_read++;} else {bytes_read = 0; }  break;
-        }
-        
-        if((bytes_read == 10) && (ok == 1)) 
+      case 0:
+        if ( reply[0] != 0xAA )
         {
-            *return_1 = float(uint8_t(pm25_high_byte)*256 + uint8_t(pm25_low_byte))/10.0; 
-            *return_2 = float(uint8_t(pm10_high_byte)*256 + uint8_t(pm10_low_byte))/10.0; 
-            bytes_read = 0;
-            err = 0;
-            ok = 0;
+          if( _debug){ Serial.print("invalid header received "); Serial.println( reply[i], HEX );}
+          status = false;
         }
-        yield();
-    }    
-    return err;
-
-};
-
-uint8_t sds011::read_msg(uint8_t command, uint16_t *return_1, uint16_t *return_2, uint16_t *id) {
-    uint8_t current_byte = 0x00;
-    uint8_t command_byte = 0x00;
-    uint8_t return_byte_1 = 0x00;
-    uint8_t return_byte_2 = 0x00;
-    uint8_t id_byte_1 = 0x00;
-    uint8_t id_byte_2 = 0x00;
-    uint8_t pm10_low_byte,pm10_high_byte,pm25_low_byte,pm25_high_byte;
+        break;
+      case 1:
+        if ( cmd != 4 )
+        { 
+          if ( reply[1] != 0xC5 )
+          {
+            if( _debug){ Serial.print(" invalid reply received "); Serial.println( reply[i], HEX ); }
+            status = false;
+          }
+        }else
+        {
+          if ( reply[1] != 0xC0 )
+          {
+            if( _debug){ Serial.print(" invalid reply received "); Serial.println( reply[i], HEX);}
+            status = false;
+          }
+        } 
+        break;
+      case 2:
+        if ( cmd != 4 )
+        {
+          if ( reply[2] != cmd )
+          {
+            if( _debug){ Serial.print(" wrong command received "); Serial.println( reply[i], HEX );}
+            status = false;
+          }
+        }
+        break;
+      case 8:
+        if ( checksum != reply[8] )
+        {
+          if( _debug){ Serial.print(" wrong checksum found"); Serial.print( checksum, HEX );Serial.print(" while received "); Serial.println(reply[8], HEX );}
+          status = false;
+        }
+        break;
+      case 9:
+        if( reply[9] != 0xAB )
+        {
+          status = false;
+        }
+        break;
+      default:
+        break;
+    }
+    yield();
+  }
     
-    ///@todo change id to uint16_t instead of two uint8_t
-    //uint16_t id = 0x0000;
-    uint8_t err = 1;
-    uint8_t bytes_read = 0;
+  if ( i < 10 ) status = false;
+  if( _debug){ Serial.println(""); Serial.print("seccessful response, read "); Serial.print(i); Serial.print( " bytes: "); Serial.print( status?"ok":"error" ); Serial.println("--"); } 
+  
+  return( status );
 
-    while(_uart->available() > 10-bytes_read) {
-        current_byte = _uart->read();
-        switch(bytes_read) {
-            case 0: if(current_byte == MSG_HEAD) {bytes_read++;} break;
-            case 1: if(current_byte == REPLY_CFG) {bytes_read++;} else {bytes_read = 0;} break;
-            case 2: command_byte = current_byte; bytes_read++; break;
-            case 3: bytes_read++; break;
-            case 4: bytes_read++; break;
-            case 5: bytes_read++; break;
-            case 6: id_byte_1 = current_byte; bytes_read++; break;
-            case 7: id_byte_2 = current_byte; bytes_read++; break;
-            case 8: if (uint8_t(current_byte) ==  (uint8_t(return_byte_1)+uint8_t(return_byte_2)+uint8_t(id_byte_1)+uint8_t(id_byte_2))) {err = 0;} else {bytes_read = 0;} break;
-            case 9: if(current_byte == MSG_TAIL) {bytes_read++;} else {bytes_read = 0; err = 1;} break;
-        };
+}
 
-        if((bytes_read == 10) && (err == 0)) {
-        }
+/**************************************************************************/
+/*!
+    @brief function to set the reporting mode to auto or query
+    response will contain either QUERYMODE or REPORTMODE,
+    depending on how it was set by this function ( by setting
+    argument set to SETMODE), or how it was set before if argument
+    set was set to ASKMODE.
+    @param response the return the response of the command
+    @param mode the mode to be set 0:auto, 1:query
+    @param set the read (0) or write (1)
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::dataReportingModeCmd( uint8_t *response, uint8_t mode, uint8_t set ){
+	//    0    1    2       3       4       5    6    7    8    9   10   11   12   13   14         15          16    17    18
+	//{ 0xAA,0xB4,0x02,  0:query, 0:auto,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB}; 
+  //                   1:set    1:query
+	uint8_t reply[10];
+	bool status=false;
+	
+	*response = 0xFF;
+	
+    if( (status = sdsCommunicate( 0x02, set, mode,_id_1, _id_2, reply )) ){ 
+		if( _debug){
+			char str[50];
+			sprintf( str, "Device Id = %02X %02X and  Mode = %s\n", reply[6],reply[7],reply[4] == QUERYMODE?"Querymode":"Reportingmode" );
+			Serial.println ( str );
+		}
+	
+		if ( set == SETMODE && reply[4] != mode ){
+			status = false;
+		}
+		if ( status ){
+			*response = reply[4];
+		}
+	}
+	
+	return( status );	
+}
 
-        pm10_low_byte = 0x00;
-        pm10_high_byte = 0x00;
-        pm25_low_byte = 0x00;
-        pm25_high_byte = 0x00;
-        id_byte_1 = 0x00;
-        id_byte_2 = 0x00;
-        err = 1;
-        bytes_read = 0;
+/**************************************************************************/
+/*!
+    @brief function to retrieve PM values
+    @param pm10 returned value of PM10 sensor value
+    @param pm25 returned value of PM25 sensor value
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::dataQueryCmd( float *pm10, float *pm25 ){
+	//     0    1    2    3    4    5    6    7    8    9   10   11   12   13   14         15          16    17    18
+	// { 0xAA,0xB4,0x04,  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB}; 
+	uint8_t reply[10];
+	bool status=false;
+	
 
-    };
-
-    return err;
-
-};
-
-
-/// Prompts sensor to report measurement data. If sensor is in report query mode, an according query command is sent first, otherwise, the most recent measurement reported in the working period is returned. 
-/// @todo FULLY IMPLEMENT read()
-uint8_t sds011::read(float *pm10_return, float *pm25_return) {
-  uint8_t err = 1;
-    if(_mode == MODE_QUERY) {
-        ///@todo send query command 
-        //send_msg(CMD_QUERY);
-    };
-    err = read_msg(pm25_return, pm10_return);
-    return(err);
-};
-
-/// @todo TEST sleep()
-uint8_t sds011::sleep() {
-    send_msg(CMD_SLEEP, 1, 0);
-    uint8_t val = 0;
-    //uint8_t err = read_msg(*val);
-    uint8_t err;
-    return err;
-};
+    if( (status = sdsCommunicate( 0x04, 0, 0,_id_1, _id_2, reply )) ){ 
+		*pm25 = (float) ( reply[2] + (reply[3]<<8 ) ) / 10.0;
+		*pm10 = (float) ( reply[4] + (reply[5]<<8 ) ) / 10.0;
+		if( _debug){
+			Serial.print("Data : pm10 ");	Serial.print( *pm10, 2);Serial.print(" pm2.5 ");Serial.print( *pm25, 2);Serial.print(" status : ");	Serial.println( status);		}	
+	}
+	
+	return( status );	
+}
 
 
-/// @todo TEST wakeup()
-uint8_t sds011::wakeup() {
-    uint8_t err = send_msg(CMD_SLEEP, 1, 1);
-    return err;
-};
+/**************************************************************************/
+/*!
+    @brief function to set new id/serial number for the sensor.
+    Device id is two bytes, the factory sets each device to a unique id.
+    New id will be returned in response. 
+    By default any device is addressed by address FF FF. This is the default
+    for this library as not many people will connect more than one device
+    to the same serial lines. If this default (FF FF) is used, class instance
+    device id (_id_1 and _id_2 ) will not be updated with this
+    new device address, and FF FF will continued to be used to address the device.
+    @param response the return ID value
+    @param new_Id1 new id lower byte
+    @param new_Id2 new id higher byte
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::deviceIdCmd( uint8_t response[2], uint8_t new_Id1, uint8_t new_Id2 ){
+	//     0    1    2   3    4    5    6    7    8    9   10   11   12          13          14           15          16     17    18
+	//{ 0xAA,0xB4,0x05,  0,   0,   0,   0,   0,   0,   0,   0,   0,   0, new_Id1, new_Id2, _id_1, _id_2, 0x00, 0xAB}; 
+	uint8_t reply[10];
+	bool status=false;
+	
+	response[0] = _id_1;
+	response[1] = _id_2;
+	
 
-// (2) Timed hibernate (cycle to work)
+		if( (status = sdsCommunicate( 0x05, new_Id1, new_Id2,_id_1, _id_2, reply )) ){ 
+		
+		if ( reply[6] != new_Id1 || reply[7] != new_Id2 ) {
+			if( _debug){
+				char str[50];
+				sprintf( str,"Setting Device Id Failed. Tried = %02X %02X, Returned = %02X %02X\n", new_Id1, new_Id2, reply[6], reply[7]  );
+				Serial.println( str );
+			}
+		
+			status = false;
+		}else{
+			if ( _id_1 != 0xFF || _id_2 != 0xFF ){
+				_id_1 = new_Id1;
+				_id_2 = new_Id2;	
+			}
+			
+			response[0] = reply[6];
+			response[1] = reply[7];
+		}
+	}
+	
+	return( status );	
+}
 
-// (3) User ID setting
 
-// (4) Set data reporting mode (active report and query report)
-/// @todo TEST set_mode()
-uint8_t sds011::set_mode(uint8_t mode) {
-    uint8_t err = send_msg(CMD_MODE, 1, mode);
-    return err;
-};
+/**************************************************************************/
+/*!
+    @brief function to set sleep or work mode and check the response. 
+    response will contain either sds011_dataReportingModeCmd or sds011_SLEEPING,
+    depending on how it was set by this function ( by setting
+    argument set to SETMODE), or how it was set before if argument
+    set was set to sds011_ASK.    
+    @param response the return value of the command
+    @param mode sleep or work mode
+    @param set parameter to set (write) or unset (get)
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::sleepWorkModeCmd( uint8_t *response, uint8_t mode,uint8_t set){
+	//    0    1    2        3          4      5    6    7    8    9   10   11   12   13   14         15          16    17    18
+	//{ 0xAA,0xB4,0x06,  0:query,   0:sleep,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB}; 
+  //                   1:set      1:work  
+	uint8_t reply[10];
+	bool status=false;
+	
+	*response = 0xFF;
+	
 
-// (5) Version number query
+		if( (status = sdsCommunicate( 0x06, set, mode,_id_1, _id_2, reply )) ){ 
+		if( _debug){
+			char str[50];
+			sprintf(str, "Device Id = %02X %02X and Mode = %s\n", reply[6],reply[7],reply[4] == WORKMODE?"Working":"Sleeping" );
+			Serial.println( str );
+		}
+		*response = reply[4];
+		if ( set == SETMODE && reply[4] != mode ){
+			status = false;
+		}
+	}else{
+		if ( set == SETMODE && mode == WORKMODE ){
+			if( _debug)Serial.println("No Reply Received After Entering Working Mode." );
+		}
+	}
+	return( status );	
+}
+
+/**************************************************************************/
+/*!
+    @brief function to set work period for reporting.     
+    response will contain 0 ( for continuous mode) or the Interval
+    time in minutes (for interval mode). According to the datasheet
+    device will sleep during the interval and become active 30 seconds 
+    before the interval is reached. 
+    @param response the return value of the work perion command
+    @param minutes duration of sleep time
+    @param set parameter to set (write) or unset (get)
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::workPeriodCmd( uint8_t *response, uint8_t minutes,uint8_t set ){
+	//    0    1    2     3              4       5    6    7    8    9   10   11   12   13   14    1     16    17    18
+	//{ 0xAA,0xB4,0x08, 0:query, 0:continuous,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB};
+  //                  1:set    1:sleep minutes 
+	uint8_t reply[10];
+	bool status=false;
+	
+	*response = 0xFF;
+	
+		if( (status = sdsCommunicate( 0x08, set, minutes,_id_1, _id_2, reply )) ){ 
+		if( _debug){
+			char str[50];
+			sprintf(str, "Device id = %02X %02X : Work Period = %s %d %s\n", reply[6],reply[7],reply[4] == 0?"Continuous":"Interval = ",reply[4] == 0?0:reply[4], reply[4] == 0?".":"minutes." );
+			Serial.println( str );
+			}
+	}	
+	if ( set == SETMODE && reply[4] != minutes ){
+		status = false;
+	}
+	if ( status ){
+		*response = reply[4];
+	}
+	return( status );	
+}
+
+
+/**************************************************************************/
+/*!
+    @brief Used to get the device firmware version and serial number.
+    response[3] contains firmware date as YY, MM, DD if succesful else FF FF FF.
+    @param ver string version to hold the firware version
+    @param id integer to hold the serial number
+    @returns status the status of the command
+*/
+/**************************************************************************/
+bool sds011::deviceInfoCmd( String *ver, uint16_t *id ){
+// 0    1    2    3    4    5    6    7    8    9   10   11   12   13   14         15          16    17    18
+//{ 0xAA,0xB4,0x07,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB}; 
+	uint8_t reply[10];
+	bool status = false;
+  char str[50];
+		
+		if( (status = sdsCommunicate( 0x07, 0, 0,_id_1, _id_2, reply )) ){ 
+		if ( _debug){
+				
+				sprintf(str, "Device Id = %02X %02X and Firmware Version = 20%02d-%02d-%02d\n", reply[6],reply[7], reply[3],reply[4],reply[5]);
+				Serial.println( str);	
+		}		
+	}
+ sprintf(str, "20%02d-%02d-%02d\n", reply[3],reply[4],reply[5]);
+ *ver = str;
+ *id = reply[7]*256+reply[6];
+ return( status );
+}
+
+/**************************************************************************/
+/*!
+    @brief  setting a debugging flag
+    @param on bool flag for debugging
+    @returns void
+*/
+/**************************************************************************/
+void sds011::setDebug( bool on ){
+	_debug = on;
+}
+
+
+/// Specification from the Nova Fitness Co. Ltd. sds011 data sheet, V1.3 
+///
+/// | UART ||
+/// | :-------------------- | :-------------|
+/// | Bit rate              | 9600          |
+/// | Data bit              | 8             |
+/// | Parity bit            | NO            |
+/// | Stop bit              | 1             |
+/// | Data Packet frequency | 1Hz           |
+
+/**************************************************************************/
+/*!
+    @brief  initializes the sds011 sensor with hardware port and pins
+    @param uart hardware uart port
+    @param rx uart recieve pin
+    @param tx uart transmit pin
+    @param id_1 device lower byter
+    @param id_2 device higher byter
+    @returns status true when executed seccessfully
+*/
+/**************************************************************************/
+bool sds011::begin(HardwareSerial* uart, uint8_t rx, uint8_t tx, uint8_t id_1, uint8_t id_2 ) 
+{
+  _rx = rx;
+	_tx = tx;
+	_id_1 = id_1;
+	_id_2 = id_2;
+	
+	_debug  = false;
+  uart->begin(9600,SERIAL_8N1, rx, tx);
+  _uart=uart;
+  if ( _debug) Serial.println("sensor is init.");
+  return true;
+}
