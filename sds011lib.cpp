@@ -69,7 +69,7 @@ bool sds011::sdsCommunicate( uint8_t command, uint8_t option_1, uint8_t  option_
       if( _debug)Serial.println("data unavailable, exiting...");
       i = 0;
       status = false;
-      if ( (command == CMD_SLEEP_AND_WORK && option_1 == SETMODE && option_2 == WORKMODE) ) { 
+      if ( (command == CMD_SLEEP_AND_WORK && option_1 == WRITE_MODE && option_2 == WORK_MODE) ) { 
         // wake from sleep.
         break;
       }
@@ -285,17 +285,17 @@ bool sds011::getResponse(uint8_t cmd, uint8_t reply[10] )
 /**************************************************************************/
 /*!
     @brief function to set the reporting mode to auto or query
-    response will contain either QUERYMODE or REPORTMODE,
+    response will contain either QUERY_MODE or AUTO_REPORT_MODE,
     depending on how it was set by this function ( by setting
-    argument set to SETMODE), or how it was set before if argument
-    set was set to ASKMODE.
+    argument wr to WRITE_MODE), or how it was set before if argument
+    wr was set to READ_MODE.
     @param response the return the response of the command
-    @param mode the mode to be set 0:auto, 1:query
-    @param set the read (0) or write (1)
+    @param mod the mode to be set 0:auto, 1:query
+    @param wr the read (0) or write (1)
     @returns status tells the seccessful execution
 */
 /**************************************************************************/
-bool sds011::dataReportingModeCmd( uint8_t *response, uint8_t mode, uint8_t set ){
+bool sds011::dataReportingModeCmd( uint8_t *response, uint8_t mod, uint8_t wr ){
 	//    0    1    2       3       4       5    6    7    8    9   10   11   12   13   14         15          16    17    18
 	//{ 0xAA,0xB4,0x02,  0:query, 0:auto,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB}; 
   //                   1:set    1:query
@@ -304,14 +304,14 @@ bool sds011::dataReportingModeCmd( uint8_t *response, uint8_t mode, uint8_t set 
 	
 	*response = MSG_FF;
 	
-    if( (status = sdsCommunicate( CMD_REPORTING_MODE, set, mode,_id_1, _id_2, reply )) ){ 
+    if( (status = sdsCommunicate( CMD_REPORTING_MODE, wr, mod,_id_1, _id_2, reply )) ){ 
 		if( _debug){
 			char str[50];
-			sprintf( str, "Device Id = %02X %02X and  Mode = %s\n", reply[6],reply[7],reply[4] == QUERYMODE?"Querymode":"Reportingmode" );
+			sprintf( str, "Device Id = %02X %02X and  Mode = %s\n", reply[6],reply[7],reply[4] == QUERY_MODE?"Querymode":"Reportingmode" );
 			Serial.println ( str );
 		}
 	
-		if ( set == SETMODE && reply[4] != mode ){
+		if ( wr == WRITE_MODE && reply[4] != mod ){
 			status = false;
 		}
 		if ( status ){
@@ -435,15 +435,15 @@ bool sds011::deviceIdCmd( uint8_t response[2], uint8_t new_Id1, uint8_t new_Id2 
     @brief function to set sleep or work mode and check the response. 
     response will contain either sds011_dataReportingModeCmd or sds011_SLEEPING,
     depending on how it was set by this function ( by setting
-    argument set to SETMODE), or how it was set before if argument
-    set was set to sds011_ASK.    
+    argument set to WRITE_MODE), or how it was set before if argument
+    wr was set to sds011_ASK.    
     @param response the return value of the command
-    @param mode sleep or work mode
-    @param set parameter to set (write) or unset (get)
+    @param mod sleep or work mode
+    @param wr parameter to set (write) or unset (get)
     @returns status tells the seccessful execution
 */
 /**************************************************************************/
-bool sds011::sleepWorkModeCmd( uint8_t *response, uint8_t mode,uint8_t set){
+bool sds011::sleepWorkModeCmd( uint8_t *response, uint8_t mod,uint8_t wr){
 	//    0    1    2        3          4      5    6    7    8    9   10   11   12   13   14         15          16    17    18
 	//{ 0xAA,0xB4,0x06,  0:query,   0:sleep,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB}; 
   //                   1:set      1:work  
@@ -453,18 +453,18 @@ bool sds011::sleepWorkModeCmd( uint8_t *response, uint8_t mode,uint8_t set){
 	*response = MSG_FF;
 	
 
-		if( (status = sdsCommunicate( CMD_SLEEP_AND_WORK, set, mode,_id_1, _id_2, reply )) ){ 
+		if( (status = sdsCommunicate( CMD_SLEEP_AND_WORK, wr, mod,_id_1, _id_2, reply )) ){ 
 		if( _debug){
 			char str[50];
-			sprintf(str, "Device Id = %02X %02X and Mode = %s\n", reply[6],reply[7],reply[4] == WORKMODE?"Working":"Sleeping" );
+			sprintf(str, "Device Id = %02X %02X and Mode = %s\n", reply[6],reply[7],reply[4] == WORK_MODE?"Working":"Sleeping" );
 			Serial.println( str );
 		}
 		*response = reply[4];
-		if ( set == SETMODE && reply[4] != mode ){
+		if ( wr == WRITE_MODE && reply[4] != mod ){
 			status = false;
 		}
 	}else{
-		if ( set == SETMODE && mode == WORKMODE ){
+		if ( wr == WRITE_MODE && mod == WORK_MODE ){
 			if( _debug)Serial.println("No Reply Received After Entering Working Mode." );
 		}
 	}
@@ -480,11 +480,11 @@ bool sds011::sleepWorkModeCmd( uint8_t *response, uint8_t mode,uint8_t set){
     before the interval is reached. 
     @param response the return value of the work perion command
     @param minutes duration of sleep time
-    @param set parameter to set (write) or unset (get)
+    @param wr parameter to set (write) or unset (get)
     @returns status tells the seccessful execution
 */
 /**************************************************************************/
-bool sds011::workPeriodCmd( uint8_t *response, uint8_t minutes,uint8_t set ){
+bool sds011::workPeriodCmd( uint8_t *response, uint8_t minutes,uint8_t wr ){
 	//    0    1    2     3              4       5    6    7    8    9   10   11   12   13   14    1     16    17    18
 	//{ 0xAA,0xB4,0x08, 0:query, 0:continuous,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,_id_1, _id_2, 0x00, 0xAB};
   //                  1:set    1:sleep minutes 
@@ -493,14 +493,14 @@ bool sds011::workPeriodCmd( uint8_t *response, uint8_t minutes,uint8_t set ){
 	
 	*response = MSG_FF;
 	
-		if( (status = sdsCommunicate( CMD_WORKING_PERIOD, set, minutes,_id_1, _id_2, reply )) ){ 
+		if( (status = sdsCommunicate( CMD_WORKING_PERIOD, wr, minutes,_id_1, _id_2, reply )) ){ 
 		if( _debug){
 			char str[50];
 			sprintf(str, "Device id = %02X %02X : Work Period = %s %d %s\n", reply[6],reply[7],reply[4] == 0?"Continuous":"Interval = ",reply[4] == 0?0:reply[4], reply[4] == 0?".":"minutes." );
 			Serial.println( str );
 			}
 	}	
-	if ( set == SETMODE && reply[4] != minutes ){
+	if ( wr == WRITE_MODE && reply[4] != minutes ){
 		status = false;
 	}
 	if ( status ){

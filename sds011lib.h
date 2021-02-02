@@ -10,20 +10,21 @@
 #include "Arduino.h"
 
 /// Reporting mode as auto
-#define REPORTMODE 0
+#define AUTO_REPORT_MODE 0
 /// Reporting mode as queries
-#define QUERYMODE  1
+#define QUERY_MODE  1
 /// get or receive
-#define ASKMODE 0
+#define READ_MODE 0
 /// set or write
-#define SETMODE 1
+#define WRITE_MODE 1
 /// mode set to sleep
-#define SLEEPMODE 0
+#define SLEEP_MODE 0
 /// mode set to normal
-#define WORKMODE  1
+#define WORK_MODE  1
 /// set the maximum trials for response
 #define MAX_WAIT 30
-
+/// dont care while reading
+#define DONT_CARE  0
 
 /// sds response header
 #define MSG_HEAD 0xAA //170
@@ -57,12 +58,12 @@ class sds011 {
 	public:
 		sds011(void);
 		bool begin(HardwareSerial* uart,	uint8_t rx, uint8_t tx, uint8_t id_1 = MSG_FF, uint8_t id_2 = MSG_FF );
-		bool dataReportingModeCmd( 			uint8_t *response, 	uint8_t mode = REPORTMODE,	uint8_t set = ASKMODE );
+		bool dataReportingModeCmd( 			uint8_t *response, 	uint8_t mod = AUTO_REPORT_MODE,	uint8_t wr = READ_MODE );
 		bool dataQueryCmd( float *ppm10, 		float *ppm25 );
     bool dataAutoQueryCmd( float *ppm10,    float *ppm25 );
 		bool deviceIdCmd( 		uint8_t response[2], 	uint8_t new_Id1, uint8_t new_Id2 );
-		bool sleepWorkModeCmd( 		uint8_t *response, 	uint8_t awake = WORKMODE,uint8_t set = ASKMODE);
-		bool workPeriodCmd(		uint8_t *response, 	uint8_t minutes = 0,uint8_t set = ASKMODE);
+		bool sleepWorkModeCmd( 		uint8_t *response, 	uint8_t mod = WORK_MODE,uint8_t wr = READ_MODE);
+		bool workPeriodCmd(		uint8_t *response, 	uint8_t minutes = 0,uint8_t wr = READ_MODE);
 		bool deviceInfoCmd( String *ver, uint16_t *id );
     void setDebug( bool on );
   private:

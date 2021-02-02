@@ -32,7 +32,7 @@ char  str[80];
 
 void setup() {
   delay(1000);
-  uint8_t fw[2], mode, asleep;
+  uint8_t fw[2], result;
   String v;
   uint16_t idd;
     
@@ -44,13 +44,13 @@ void setup() {
   //Set the ID
   sds.deviceIdCmd(fw,0x66,0x50);
   if ( fw[0] != MSG_FF ){ 
-    sprintf( str,"ID = %02X %02X\n",fw[0], fw[1]  );
+    sprintf( str,"ID(hex) = %02X %02X",fw[0], fw[1]  );
     Serial.println( str );
   }
   
   //get the ID and Version
   sds.deviceInfoCmd( &v,&idd );
-  Serial.println("Version = "+v+"ID = "+String(idd));
+  Serial.println("Version = "+v+"ID(dec) = "+String(idd));
   
   /////////////////////////////////////////////////////////////////////////////////////
   //3rd 0：query the current mode
@@ -59,15 +59,15 @@ void setup() {
   //2nd 0：report active mode
   //0：continuous(default)
   //1-30minute：【work 30 seconds and sleep n*60-30 seconds】
-  sds.workPeriodCmd( &mode, 3,1 );
-  if ( mode != MSG_FF ){
-    Serial.println( "Work Period set: "+String(mode));  
+  sds.workPeriodCmd( &result, 3,WRITE_MODE );
+  if ( result != MSG_FF ){
+    Serial.println( "Work Period set to: "+String(result));  
   }
   delay(100);
   
-  sds.workPeriodCmd( &mode, 30,0 );
-  if ( mode != MSG_FF ){
-    Serial.println( "Work Period get: "+String(mode));  
+  sds.workPeriodCmd( &result, DONT_CARE,READ_MODE );
+  if ( result != MSG_FF ){
+    Serial.println( "Work Period read as: "+String(result));  
   }
   delay(100);
 
@@ -79,39 +79,40 @@ void setup() {
   //0: sleep
   //1: work
   
-  sds.sleepWorkModeCmd(&asleep, 1, ASKMODE );
-  if ( asleep != MSG_FF ){
-    Serial.print( "Module  get: "); Serial.println( asleep == SLEEPMODE?"Sleep":"Work" ); 
+  sds.sleepWorkModeCmd(&result, DONT_CARE, READ_MODE );
+  if ( result != MSG_FF ){
+    Serial.print( "Operating Mode read as: "); Serial.println( result == SLEEP_MODE?"Sleep":"Work" ); 
   }
   delay(100);
   
-  sds.sleepWorkModeCmd(&asleep, 1, SETMODE );
+  sds.sleepWorkModeCmd(&result, WORK_MODE, WRITE_MODE );
   // If module is sleeping, then do not expect an answer. Better ask again after a short delay.
-  if ( asleep != MSG_FF ){
-    Serial.print( "Module switched to: "); Serial.println( asleep == SLEEPMODE?"Sleep":"Work" );
+  if ( result != MSG_FF ){
+    Serial.print( "Operating Mode switched to: "); Serial.println( result == SLEEP_MODE?"Sleep":"Work" );
   }
   delay(100);
   
-  sds.sleepWorkModeCmd(&asleep, 1, ASKMODE );
-  if ( asleep != MSG_FF ){
-    Serial.print( "Module Mode get: "); Serial.println( asleep == SLEEPMODE?"Sleep":"Work" ); 
+  sds.sleepWorkModeCmd(&result, DONT_CARE, READ_MODE );
+  if ( result != MSG_FF ){
+    Serial.print( "Operating Mode read as: "); Serial.println( result == SLEEP_MODE?"Sleep":"Work" ); 
   }
   delay(100);
 
   /////////////////////////////////////////////////////////////////////////////////////
-  //3rd 0：query the current mode
+  //3rd Param
+  //0：query the current mode
   //1：set reporting mode
   //2nd 0：report active mode
   //1：Report query mode
-  sds.dataReportingModeCmd( &mode, 0, SETMODE);
-  if ( mode != MSG_FF ){
-    Serial.print( "Reporting switched to: "); Serial.println( mode == REPORTMODE?"Reportmode":"Querymode" ); 
+  sds.dataReportingModeCmd( &result, AUTO_REPORT_MODE, WRITE_MODE);
+  if ( result != MSG_FF ){
+    Serial.print( "Reporting switched to: "); Serial.println( result == AUTO_REPORT_MODE?"AutoReportmode":"Querymode" ); 
   }
   delay(100);
 
-  sds.dataReportingModeCmd( &mode, 1, ASKMODE);
-  if ( mode != MSG_FF ){
-    Serial.print( "Reporting Mode get: "); Serial.println( mode == REPORTMODE?"Reportmode":"Querymode" ); 
+  sds.dataReportingModeCmd( &result, DONT_CARE, READ_MODE);
+  if ( result != MSG_FF ){
+    Serial.print( "Reporting Mode read as: "); Serial.println( result == AUTO_REPORT_MODE?"AutoReportmode":"Querymode" ); 
   }
   delay(100);
 
