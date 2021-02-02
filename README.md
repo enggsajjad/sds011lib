@@ -8,7 +8,7 @@ ESP32 C/C++ Arduino library for the Nova Fitness SDS011 PM2.5 dust sensor
 
 Check out repository 
 
-    git clone https://github.com/buddemat/sds011lib.git  
+    git clone https://github.com/enggsajjad/sds011lib  
 
 Basic usage: include the library in your code, initialize it and 
 
@@ -28,8 +28,8 @@ The library is not yet completely implemented.
 
 Missing functionality includes (this and maybe more):
 
-* energy saving mode (sleep/wakeup) not yet tested => done
-* timed hibernate (cycle to work) not yet implemented => done
-* setting user ID not yet implemented => done
-* version number query not yet implemented  => done
-* no `.ino` example sketch yet => done
+* energy saving mode (sleep/wakeup) not yet tested
+* timed hibernate (cycle to work) not yet implemented
+* setting user ID not yet implemented
+* version number query not yet implemented 
+* no `.ino` example sketch yet

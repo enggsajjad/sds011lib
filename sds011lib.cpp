@@ -6,32 +6,6 @@
 
 #include "sds011lib.h"
 
-
-/// sds response header
-unsigned char MSG_HEAD        = 0xAA; //170
-/// sds response footer
-unsigned char MSG_TAIL        = 0xAB; //172
-/// sds response/command reserve word
-unsigned char MSG_RESERVED    = 0x00;
-/// sds sending command
-unsigned char CMD             = 0xB4; //180
-/// response query data indication
-unsigned char REPLY_DATA      = 0xC0; //192
-/// response query configuration indication
-unsigned char REPLY_CFG       = 0xC5; //197
-/// sending command for reporting mode
-unsigned char CMD_REPORTING_MODE        = 0x02;
-/// sending command for query data mode
-unsigned char CMD_QUERY_DATA       = 0x04;
-/// sending command to set device id
-unsigned char CMD_SET_DEVICE_ID          = 0x05;
-/// sending command for sleep and work mode
-unsigned char CMD_SLEEP_AND_WORK       = 0x06;
-/// sending command for geting firmware version
-unsigned char CMD_FIRMWARE_VERSION  = 0x07;
-/// sending command for working period setting
-unsigned char CMD_WORKING_PERIOD       = 0x08;
-
 /**
  * @mainpage 
  * @section Description
@@ -84,19 +58,18 @@ sds011::sds011(void) {
 /**************************************************************************/
 bool sds011::sdsCommunicate( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2, uint8_t reply[10]  )
 {
-  uint8_t checksum=0,i, lc, wait=MAX_WAIT;
   bool status=false;
-   
-  for(lc = 0; lc < 10 && status == false; ++lc)
+  uint8_t i, lc, wait = MAX_WAIT;
+  for(uint8_t lc = 0; lc < 10 && status == false; ++lc)
   {
-    sendCommand(  command,  option_1,   option_2,  id_1,  id_2 );
+    i = sendCommand(  command,  option_1,   option_2,  id_1,  id_2 );
     
     if( i >= wait )
     {
       if( _debug)Serial.println("data unavailable, exiting...");
       i = 0;
       status = false;
-      if ( (command == 6 && option_1 == 1 && option_2 == 1) ) { 
+      if ( (command == CMD_SLEEP_AND_WORK && option_1 == SETMODE && option_2 == WORKMODE) ) { 
         // wake from sleep.
         break;
       }
@@ -152,49 +125,49 @@ bool sds011::sdsCommunicate( uint8_t command, uint8_t option_1, uint8_t  option_
     @returns status tells the seccessful execution
 */
 /**************************************************************************/
-bool sds011::sendCommand( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2 )
+uint8_t sds011::sendCommand( uint8_t command, uint8_t option_1, uint8_t  option_2, uint8_t id_1, uint8_t id_2 )
 {
-  uint8_t checksum=0,i, lc, wait=MAX_WAIT;
-  bool status=false;  
+  uint8_t wait=MAX_WAIT,i;
+  //bool status=false;  
   if( _debug)Serial.println("Sending command...       ");
   
-  checksum = command + option_1 + option_2 + id_1 + id_2;
-  _uart->write(MSG_HEAD);
-  _uart->write(CMD);
+  uint8_t checksum = command + option_1 + option_2 + id_1 + id_2;
+  _uart->write((uint8_t)MSG_HEAD);
+  _uart->write((uint8_t)CMD_WRITE_MODE);
   _uart->write(command);
-  if ((command == CMD_REPORTING_MODE) || (command == CMD_SLEEP_AND_WORK) || (command == CMD_WORKING_PERIOD)) 
+  if ((command == (uint8_t)CMD_REPORTING_MODE) || (command == (uint8_t)CMD_SLEEP_AND_WORK) || (command == (uint8_t)CMD_WORKING_PERIOD)) 
   {
     _uart->write(option_1); 
     _uart->write(option_2);
   }
-  for (uint8_t i = 0; i < 10; i++) 
+  for ( i = 0; i < 10; i++) 
   {
-    _uart->write(MSG_RESERVED);
+    _uart->write((uint8_t)MSG_RESERVED);
   }
-  if (command == CMD_SET_DEVICE_ID) 
+  if (command == (uint8_t)CMD_SET_DEVICE_ID) 
   {
     _uart->write(option_1); 
     _uart->write(option_2);
-  }else if ((command == CMD_QUERY_DATA) || (command == CMD_FIRMWARE_VERSION)) 
+  }else if ((command == (uint8_t)CMD_QUERY_DATA) || (command == (uint8_t)CMD_FIRMWARE_VERSION)) 
   {
-    _uart->write(MSG_RESERVED);
-    _uart->write(MSG_RESERVED);
+    _uart->write((uint8_t)MSG_RESERVED);
+    _uart->write((uint8_t)MSG_RESERVED);
   }
   _uart->write(id_1);
   _uart->write(id_2);
   _uart->write(checksum);
-  _uart->write(MSG_TAIL);
+  _uart->write((uint8_t)MSG_TAIL);
   _uart->flush();
   
   delay(300);
     
-  for(i=0; !_uart->available() && i < wait ; ++i )
+  for( i=0; !_uart->available() && i < wait ; ++i )
   {
     delay(20);
   }
   
-  status=true;
-  return( status );
+  //status=true;
+  return(i);
 }
 
 /// Prompts sensor to report measurement data. If sensor is in report query mode, an according query command is sent first, otherwise, the next measurent reported in the 
@@ -250,23 +223,23 @@ bool sds011::getResponse(uint8_t cmd, uint8_t reply[10] )
     switch(i)
     {
       case 0:
-        if ( reply[0] != 0xAA )
+        if ( reply[0] != MSG_HEAD )
         {
           if( _debug){ Serial.print("invalid header received "); Serial.println( reply[i], HEX );}
           status = false;
         }
         break;
       case 1:
-        if ( cmd != 4 )
+        if ( cmd != CMD_QUERY_DATA )
         { 
-          if ( reply[1] != 0xC5 )
+          if ( reply[1] != REPLY_CFG )
           {
             if( _debug){ Serial.print(" invalid reply received "); Serial.println( reply[i], HEX ); }
             status = false;
           }
         }else
         {
-          if ( reply[1] != 0xC0 )
+          if ( reply[1] != REPLY_DATA )
           {
             if( _debug){ Serial.print(" invalid reply received "); Serial.println( reply[i], HEX);}
             status = false;
@@ -274,7 +247,7 @@ bool sds011::getResponse(uint8_t cmd, uint8_t reply[10] )
         } 
         break;
       case 2:
-        if ( cmd != 4 )
+        if ( cmd != CMD_QUERY_DATA )
         {
           if ( reply[2] != cmd )
           {
@@ -291,7 +264,7 @@ bool sds011::getResponse(uint8_t cmd, uint8_t reply[10] )
         }
         break;
       case 9:
-        if( reply[9] != 0xAB )
+        if( reply[9] != MSG_TAIL )
         {
           status = false;
         }
@@ -329,9 +302,9 @@ bool sds011::dataReportingModeCmd( uint8_t *response, uint8_t mode, uint8_t set 
 	uint8_t reply[10];
 	bool status=false;
 	
-	*response = 0xFF;
+	*response = MSG_FF;
 	
-    if( (status = sdsCommunicate( 0x02, set, mode,_id_1, _id_2, reply )) ){ 
+    if( (status = sdsCommunicate( CMD_REPORTING_MODE, set, mode,_id_1, _id_2, reply )) ){ 
 		if( _debug){
 			char str[50];
 			sprintf( str, "Device Id = %02X %02X and  Mode = %s\n", reply[6],reply[7],reply[4] == QUERYMODE?"Querymode":"Reportingmode" );
@@ -364,7 +337,7 @@ bool sds011::dataQueryCmd( float *pm10, float *pm25 ){
 	bool status=false;
 	
 
-    if( (status = sdsCommunicate( 0x04, 0, 0,_id_1, _id_2, reply )) ){ 
+    if( (status = sdsCommunicate( CMD_QUERY_DATA, 0, 0,_id_1, _id_2, reply )) ){ 
 		*pm25 = (float) ( reply[2] + (reply[3]<<8 ) ) / 10.0;
 		*pm10 = (float) ( reply[4] + (reply[5]<<8 ) ) / 10.0;
 		if( _debug){
@@ -373,8 +346,39 @@ bool sds011::dataQueryCmd( float *pm10, float *pm25 ){
 	
 	return( status );	
 }
+/**************************************************************************/
+/*!
+    @brief function to retrieve PM values with out Query command, it will send automatically at the interval
+    set by the work period command
+    @param pm10 returned value of PM10 sensor value
+    @param pm25 returned value of PM25 sensor value
+    @returns status tells the seccessful execution
+*/
+/**************************************************************************/
+bool sds011::dataAutoQueryCmd( float *pm10, float *pm25 )
+{
+  uint8_t reply[10];
+  bool status=false;
+  uint8_t i, lc, wait = MAX_WAIT;
+  
+  for(uint8_t lc = 0; lc < 10 && status == false; ++lc)
+  {
+    if( i >= wait )
+    {
+      if( _debug)Serial.println("data unavailable, exiting...");
+      i = 0;
+      status = false;
+    }
+    status = getResponse( (uint8_t)CMD_QUERY_DATA, reply );
+  }
 
-
+  *pm25 = (float) ( reply[2] + (reply[3]<<8 ) ) / 10.0;
+  *pm10 = (float) ( reply[4] + (reply[5]<<8 ) ) / 10.0;
+  if( _debug){
+    Serial.print("Data : pm10 "); Serial.print( *pm10, 2);Serial.print(" pm2.5 ");Serial.print( *pm25, 2);Serial.print(" status : "); Serial.println( status);    } 
+  
+  return( status ); 
+}
 /**************************************************************************/
 /*!
     @brief function to set new id/serial number for the sensor.
@@ -401,7 +405,7 @@ bool sds011::deviceIdCmd( uint8_t response[2], uint8_t new_Id1, uint8_t new_Id2 
 	response[1] = _id_2;
 	
 
-		if( (status = sdsCommunicate( 0x05, new_Id1, new_Id2,_id_1, _id_2, reply )) ){ 
+		if( (status = sdsCommunicate( CMD_SET_DEVICE_ID, new_Id1, new_Id2,_id_1, _id_2, reply )) ){ 
 		
 		if ( reply[6] != new_Id1 || reply[7] != new_Id2 ) {
 			if( _debug){
@@ -412,7 +416,7 @@ bool sds011::deviceIdCmd( uint8_t response[2], uint8_t new_Id1, uint8_t new_Id2 
 		
 			status = false;
 		}else{
-			if ( _id_1 != 0xFF || _id_2 != 0xFF ){
+			if ( _id_1 != MSG_FF || _id_2 != MSG_FF ){
 				_id_1 = new_Id1;
 				_id_2 = new_Id2;	
 			}
@@ -446,10 +450,10 @@ bool sds011::sleepWorkModeCmd( uint8_t *response, uint8_t mode,uint8_t set){
 	uint8_t reply[10];
 	bool status=false;
 	
-	*response = 0xFF;
+	*response = MSG_FF;
 	
 
-		if( (status = sdsCommunicate( 0x06, set, mode,_id_1, _id_2, reply )) ){ 
+		if( (status = sdsCommunicate( CMD_SLEEP_AND_WORK, set, mode,_id_1, _id_2, reply )) ){ 
 		if( _debug){
 			char str[50];
 			sprintf(str, "Device Id = %02X %02X and Mode = %s\n", reply[6],reply[7],reply[4] == WORKMODE?"Working":"Sleeping" );
@@ -487,9 +491,9 @@ bool sds011::workPeriodCmd( uint8_t *response, uint8_t minutes,uint8_t set ){
 	uint8_t reply[10];
 	bool status=false;
 	
-	*response = 0xFF;
+	*response = MSG_FF;
 	
-		if( (status = sdsCommunicate( 0x08, set, minutes,_id_1, _id_2, reply )) ){ 
+		if( (status = sdsCommunicate( CMD_WORKING_PERIOD, set, minutes,_id_1, _id_2, reply )) ){ 
 		if( _debug){
 			char str[50];
 			sprintf(str, "Device id = %02X %02X : Work Period = %s %d %s\n", reply[6],reply[7],reply[4] == 0?"Continuous":"Interval = ",reply[4] == 0?0:reply[4], reply[4] == 0?".":"minutes." );
@@ -522,7 +526,7 @@ bool sds011::deviceInfoCmd( String *ver, uint16_t *id ){
 	bool status = false;
   char str[50];
 		
-		if( (status = sdsCommunicate( 0x07, 0, 0,_id_1, _id_2, reply )) ){ 
+		if( (status = sdsCommunicate( CMD_FIRMWARE_VERSION, 0, 0,_id_1, _id_2, reply )) ){ 
 		if ( _debug){
 				
 				sprintf(str, "Device Id = %02X %02X and Firmware Version = 20%02d-%02d-%02d\n", reply[6],reply[7], reply[3],reply[4],reply[5]);
